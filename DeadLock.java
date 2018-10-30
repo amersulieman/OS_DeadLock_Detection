@@ -85,6 +85,7 @@ public class DeadLock{
                 Releasing(process,resourcesContainer.get(theResource));
             }
         }//End of while loop
+        System.out.println("EXECUTION COMPLETED: No deadlock encountered.");
     }//End of main method
 
     /***
