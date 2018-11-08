@@ -16,13 +16,8 @@ public class DeadLock{
      * Assign the number of resource from the file as the key and give it a resource object
      */
     private  static HashMap<Integer,Resource> resourcesContainer;
-    /**
-     * A hashmap that will keep of the processes and where they point to.
-     * If a process needs a resource:
-     * if that resource is busy then that process is pointint to the resource and waiting.
-     */
-    private  static HashMap<Integer,Integer> processPointToResourceContainer;
-
+    private static HashMap<Integer,Process> processesContainer;
+    
    /**
     * The use of the following lists is because my deadlockCheck method is a recursive method so 
     * it is important to keep track of the processes and resources between each recurssive call
@@ -42,12 +37,11 @@ public class DeadLock{
         Scanner input = new Scanner(myFile);
         //create the hash map for resources
         resourcesContainer = new HashMap<>();
-        //create the hash map for processes
-        processPointToResourceContainer = new HashMap<>();
-        
-        int process;                    //integer value that represent a process read from file
+        processesContainer = new HashMap<>();
+
+        int processKey;                    //integer value that represent a process read from file
         String needORrelease;           //string character read from file, N or R
-        int theResource;                //integer value that represent the resource read from file
+        int resourceKey;                //integer value that represent the resource read from file
         String[] lineSplit;             //Array that will be used to split each line in file into 3 cells
 
         //Loop the file, but it will be read a line at a time.
@@ -55,46 +49,51 @@ public class DeadLock{
             //split the line by spaces, and store in the array
             lineSplit=input.nextLine().split(" ");
             //parse the first number in the line as an integer and it represent a process number
-            process=Integer.parseInt(lineSplit[0]);
+            processKey=Integer.parseInt(lineSplit[0]);
             //the second cell in the array represent letter "N" or "R" which is for need or release
             needORrelease=lineSplit[1];
             //The third cell in the array which will be the resource number, it is parsed an integer 
-            theResource=Integer.parseInt(lineSplit[2]);
+            resourceKey=Integer.parseInt(lineSplit[2]);
 
+            if(processesContainer.get(processKey)==null){
+                Process processObject = new Process(processKey);
+                processesContainer.put(processKey, processObject);
+            }
             /**
              * The idea is to create a resource object only if it was not created. By parsing the line, 
              * check the hashmap of the resources, if that key does not exist, then that resource was not
              * created. Then create it.
              */
-            if(!resourcesContainer.containsKey(theResource)){
+            if(resourcesContainer.get(resourceKey)==null){
                 //create resource object and give it the id that was parsed from file
-                Resource myResource = new Resource(theResource);
+                Resource resourceObject = new Resource(resourceKey);
                 //add the object to the hash map paired with its key which is the id of the resource parsed from the file
-                resourcesContainer.put(theResource,myResource);  
+                resourcesContainer.put(resourceKey,resourceObject);  
             }
             //If the line parsed is trying to allocate a resource for that process, "N" means need, then call method Need()
             if(needORrelease.equals("N")){
-                System.out.print("Process "+ process + " Needs Resource "+theResource + " - ");
+                System.out.print("Process "+ processKey + " Needs Resource "+resourceKey + " - ");
                 //call the method by passing it the process and the resource from that line
-                Needing(process,resourcesContainer.get(theResource));
+                Needing(processesContainer.get(processKey),resourcesContainer.get(resourceKey));
             }
             //If the line says release the resource then call Release()
             else if(needORrelease.equals("R")){
                 //call the method by passing it the process and the resource from that line
-                System.out.print("Process "+ process + " releases resource "+theResource + " - ");
-                Releasing(process,resourcesContainer.get(theResource));
+                System.out.print("Process "+ processKey + " releases resource "+resourceKey + " - ");
+                Releasing(processKey,resourcesContainer.get(resourceKey));
             }
         }//End of while loop
+        input.close();
         System.out.println("EXECUTION COMPLETED: No deadlock encountered.");
     }//End of main method
 
     /***
      * A method that handles allocating resources for processes.
      * After every allocation or after every request, dead lock will be checked for by calling a seperate method
-     * @param theProcess    The process requesting
-     * @param resource      The resource being requested
+     * @param process    The process requesting
+     * @param resourceNeeded   The resource being requested
      */
-    public static void Needing(int theProcess,Resource resource){
+    public static void Needing(Process process,Resource resourceNeeded){
         /***
          * I recreate the array lists for processes and resources for each line needed to be processed because 
          * if a line goes through and was checked for its deadlock then my arraylists needs to be resat for the next line
@@ -105,13 +104,13 @@ public class DeadLock{
         deadLockProcesses = new ArrayList<>();  //Array list will hold the deadlock processes
         deadLockResources = new ArrayList<>();  //arraylist will hold the deadlock resources
         //if the resource is not occupied then update its occupier to be the process that needs it
-        if(resource.getOccupier()==-1){
+        if(resourceNeeded.occupier==null){
             //update the resource occupier to the process that needs it
-            resource.setOccupier(theProcess);
+            resourceNeeded.occupier = process;
             //call method to Check for deadlock
-            checkDeadLock(theProcess, resource);
+            checkDeadLock(process,process, resourceNeeded);
             //If the method came here then there is no dead lock and assign the resource to the process
-            System.out.println("Resource " + resource.getId()+ " is allocated to Process "+theProcess);
+            System.out.println("Resource " + resourceNeeded.id+ " is allocated to Process "+process.id);
         }
         /***
          * Here the case where the resource is occupied by another process then i need to handle it
@@ -120,20 +119,13 @@ public class DeadLock{
          */
         else{  
             //add the process to that resource's queue
-            resource.enqueueProcess(theProcess);
+            resourceNeeded.waiting.add(process.id);
             //check the hashmap of processes pointing to resources
-            if(!processPointToResourceContainer.containsKey(theProcess)){
-                //if it does not have that process, then add it with the resource it needs as its value
-                processPointToResourceContainer.put(theProcess,resource.getId());
-            }
-            //If the hashmap alread has that key for that process, then update where that process's value to the new resource it points to
-            else{
-                processPointToResourceContainer.replace(theProcess,resource.getId());
-            }
+            process.waitingOn.add(resourceNeeded);
             //Print statement 
-            System.out.println("Process "+theProcess + " Must Wait");
+            System.out.println("Process "+process.id + " Must Wait");
             //check the deadLock
-            checkDeadLock(theProcess, resource);
+            checkDeadLock(process,process, resourceNeeded);
         }
     }//END OF NEEDING() METHOD
 
@@ -141,28 +133,25 @@ public class DeadLock{
      * A method that releases resources from the processes they were occupied by.
      * If a resource has processes waiting on it then the one waiting longest gets to occupy it first.
      * That is accomplished using queues
-     * @param theProcess    The process releasing the resource
+     * @param process    The process releasing the resource
      * @param resource      The resource being released
      */
-    public static void Releasing(int theProcess, Resource resource){
+    public static void Releasing(int process, Resource resourceReleased){
         //If a resource's queue is empty, it means no process was weaiting on it so reset it to being free
-        if(resource.getQueue().isEmpty()){
+        if(resourceReleased.waiting.isEmpty()){
             //reset the resource occupier to be no one
-            resource.setOccupier(-1);
+            resourceReleased.occupier=null;
             //Print that it is free
-            System.out.println("Resource "+resource.getId()+" is now free");
+            System.out.println("Resource "+resourceReleased.id+" is now free");
         }
         //If the resource had some process waiting on it, then reset the occupier of it to -1 which is no one then call need method
         else{
             //reset occupier to -1 to set the resource free
-            resource.setOccupier(-1);
+            resourceReleased.occupier=null;
             //get the process that is waiting on the resource
-            int processWaiting = resource.dequeueProcess();
-            //set the occupier of the current resource to the process waiting for it
-            resource.setOccupier(processWaiting);
-            //reset the process in the  hashMap to -1 because now it occupied the resource and not waiting anymore
-            processPointToResourceContainer.replace(processWaiting,-1);
-            System.out.println("Resource "+resource.getId()+" is allocated to process "+processWaiting);
+            int processWaiting = resourceReleased.waiting.remove();
+            processesContainer.get(processWaiting).waitingOn.remove(resourceReleased);        
+            Needing(processesContainer.get(processWaiting), resourceReleased);
         }
     }//END OF RELEASING() METHOD
 
@@ -177,20 +166,20 @@ public class DeadLock{
      * @param process   //Process requesting resource
      * @param resource  //The resource requested
      */
-    public static void checkDeadLock(int process,Resource resource){
-        deadLockProcesses.add(resource.getOccupier());
-        deadLockResources.add(resource.getId());
+    public static void checkDeadLock(Process coreProcess,Process process,Resource resource){
+        deadLockProcesses.add(resource.occupier.id);
+        deadLockResources.add(resource.id);
         //check if the resource we are requesting is occupied, If not then return there is no deadlock
-        if(resource.getOccupier()==-1){
+        if(resource.occupier==null){
             return;
         }
         //if the resource is occupied, check if its occupier points to a different process or requesting a different process
         //If not, then there is no deadlock
-        else if(processPointToResourceContainer.containsKey(resource.getOccupier())==false){
+        else if(process.waitingOn.isEmpty()){
             return;
         }
         //Check if the occupier of the resource is the process that is asking for the resource. That is our deadLock case
-        else if(resource.getOccupier()==process){
+        else if(resource.occupier.id==coreProcess.id){
             
             System.out.print("DEADLOCK DETECTED: ");
             printDeadLockCauses();
@@ -198,14 +187,9 @@ public class DeadLock{
         }
         //If haven't found deadlock, loop through each resource connected and call this method recursively 
         else{
-
-            //look in the hashmap, where does the occupier of that resource points to? so we can recursivley check that resource
-            int point = processPointToResourceContainer.get(resource.getOccupier());
-            //change the resource paramter
-            //now it is the resource being pointed to by the previous resource occupier
-            resource = resourcesContainer.get(point);
-            //call deadlock again
-            checkDeadLock(process,resource);
+            for(Resource r:processesContainer.get(resource.occupier.id).waitingOn){
+                checkDeadLock(coreProcess,processesContainer.get(resource.occupier.id),r);
+            }
         }
     }//END OF DEADLOCKCHECK() METHOD
    
@@ -231,61 +215,32 @@ public class DeadLock{
     }
 }
 
+class Process{
+    int id=-1;
+    Resource occupying=null;
+    List<Resource> waitingOn;
+
+    public Process(int process){
+        id=process;
+        waitingOn=new ArrayList<>();
+    }
+}
+
 /**
  * A class object that represents a resource.
  */
 class Resource{
-    private  int id;//Resource ID
-    private  int occupier=-1;   //which process occup it, initlliay -1 means no one.
-    private  Queue <Integer> waiting;    //Queue to add the processes waiting for the resource to get empty
+    int id=-1;//Resource ID
+    Process occupier=null;   //which process occup it, initlliay -1 means no one.
+    Queue <Integer> waiting;    //Queue to add the processes waiting for the resource to get empty
     
     /***
      * Constructor to create the resource object, by given it its id and create a waiting list for it.
      * @param resource  The resource number given through a file
      */
     public Resource(int resource){
-        this.id=resource;                   //create the resource
-        this.waiting=new LinkedList<>();    //create a linekd list for it
+        id=resource;                   //create the resource
+        waiting=new LinkedList<>();    //create a linekd list for it
     }
-    /**
-     * Return the resource Id
-     */
-    public int getId(){
-        return id;
-    }
-    /***
-     * Return who occupies this resource
-     */
-    public int getOccupier(){
-        return occupier;
-    }
-    /***
-     * update the process that occupies the resource
-     * @param process   The process number that occupies the resource
-     */
-    public void setOccupier(int process){
-        occupier=process;
-    }
-    /***
-     * A method that returns the queue of processes for the resource
-     * @return  A queue of processes
-     */
-    public Queue<Integer> getQueue(){
-        return waiting;
-    }
-    /**
-     * A method to enqueue in the gueue of a resource
-     * @param process   The process that is waiting on the resource to be freed
-     */
-    public void enqueueProcess(int process){
-        waiting.add(process);
-    }
-    /**
-     * A method to dequeue from the queue of resources
-     */
-    public int dequeueProcess(){
-        return waiting.remove();
-    }
-
 }
 
