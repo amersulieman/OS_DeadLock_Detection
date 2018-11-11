@@ -4,7 +4,7 @@ Process 3 Needs Resource 6 - Resource 6 is allocated to Process 3
 Process 2 Needs Resource 6 - Process 2 Must Wait
 Process 4 Needs Resource 3 - Resource 3 is allocated to Process 4
 Process 5 Needs Resource 1 - Process 5 Must Wait
-Process 1 releases resource 1 - Resource 1 is allocated to process 5
+Process 1 releases resource 1 - Resource 1 is allocated to Process 5
 Process 3 Needs Resource 3 - Process 3 Must Wait
 Process 5 releases resource 1 - Resource 1 is now free
 Process 4 Needs Resource 2 - Process 4 Must Wait
