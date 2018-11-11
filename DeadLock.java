@@ -48,6 +48,7 @@ public class DeadLock{
             needORrelease=lineSplit[1];                         //the second cell in the array represent letter "N" or "R" which is for need or release
             resourceID=Integer.parseInt(lineSplit[2]);          //parse the second number in the line as an integer and it represent a resource ID 
 
+
             //if the hash map does not have the key for the process then create an object for it and insert it in the hashmap
             if(processesContainer.get(processID)==null){
                 Process processObject = new Process(processID);
@@ -81,8 +82,8 @@ public class DeadLock{
      * @param resourceNeeded    The resource being requested
      */
     public static void Needing(Process process,Resource resourceNeeded){
-        //initillay next process is sat to the same process we began with because in checkdeadlock, nmext process is changing when the recursive call is made
-        Process nextProcess=process;
+        //next process is the process that occupies the resource we are requesting
+        Process nextProcess=resourceNeeded.occupier;
         /***
          * I recreate the array lists for processes and resources for each line needed to be processed because 
          * if a line goes through and was checked for its deadlock then my arraylists needs to be resat for the next line
@@ -91,9 +92,10 @@ public class DeadLock{
          * */
         deadLockProcesses = new ArrayList<>();  //Arraylist will hold the deadlock processes
         deadLockResources = new ArrayList<>();  //arraylist will hold the deadlock resources
+
         //if the resource is not occupied then update its occupier to be the process that needs it
         if(resourceNeeded.occupier==null){
-            resourceNeeded.occupier = process;              
+            resourceNeeded.occupier = process;      
             //call method to Check for deadlock
             checkDeadLock(process,nextProcess, resourceNeeded);
             //If this line is reached here then there is no dead lock and assign the resource to the process printed
@@ -151,31 +153,34 @@ public class DeadLock{
      * @param resource          //The resource requested, chnages during recursive call
      */
     public static void checkDeadLock(Process startingProcess,Process nextProcess,Resource resource){
-
-        deadLockProcesses.add(nextProcess.id);            //add the process to the deadlock list of processes
-        deadLockResources.add(resource.id);                     //add the resource to the deadlock list of resources
-
+        
+        deadLockResources.add(resource.id);       //add the resource to the deadlock list of resources
         //check if the resource we are requesting is occupied, If not then return there is no deadlock
         if(resource.occupier==null){
             return;
         }
         //if the resource is occupied, check if its occupier is requesting other resources. If not, then there is no deadlock
-        else if(nextProcess.resourcesWaitingToOccupy.isEmpty()){
+        //nextProcess will equal to null only if we request a resource who was not occupied by any process. so no deadlock
+        else if(nextProcess==null || nextProcess.resourcesWaitingToOccupy.isEmpty()){ 
             return;
         }
-        //Check if the occupier of the resource is the process i started with. That is our deadLock case
+        //Check if the occupier of the resource is the process I started with. That is our deadLock case
         else if(resource.occupier.id==startingProcess.id){
+            deadLockProcesses.add(startingProcess.id);          //add the starting process if the deadlock occur so it can be printed
             System.out.print("DEADLOCK DETECTED: ");
-            printDeadLockCauses();  //print the resources and processes associated with the deadlock which are in the lists i made
-            System.exit(0);         //exit the program
+            printDeadLockCauses();                              //print the resources and processes associated with the deadlock which are in the lists i made
+            System.exit(0);                                     //exit the program
         }
         //for the occupier of the resource being requested, loop through each resource it is requesting and call this method recursively with the next resource and process in chain 
         else{
             nextProcess= processesContainer.get(resource.occupier.id);  //gets the process occupying the resource being requested which will be next process to search with
+            deadLockProcesses.add(nextProcess.id);            //add the process to the deadlock list of processes
             //this for loop is to check each resource the next process has been waiting on, check if deadlock occurs through any of them
-            for(Resource nextResource : processesContainer.get(resource.occupier.id).resourcesWaitingToOccupy){
+            for(Resource nextResource : nextProcess.resourcesWaitingToOccupy){
                 checkDeadLock(startingProcess,nextProcess,nextResource);
+                deadLockResources.remove(nextResource.id);      //if this statements reached that means that resource is not involved in deadlock
             }
+            deadLockProcesses.remove(nextProcess.id);           //If this statement is reached then that process is not involved in deadlock so delete it from printing list
         }
     }//END OF DEADLOCKCHECK() METHOD
    
@@ -205,7 +210,7 @@ public class DeadLock{
  * A class that will represent a process as an object
  */
 class Process{
-    int id=-1;                              //The ID of a Process, initially sat to -1 before process is created
+    Integer id=-1;                              //The ID of a Process, initially sat to -1 before process is created
     Resource occupying=null;                //Resource object that the process occupies
     List<Resource> resourcesWaitingToOccupy;//The resources that the process is waiting on until they get freed
 
@@ -225,7 +230,7 @@ class Process{
  * A class object that represents a resource.
  */
 class Resource{
-    int id=-1;                  //Resource ID, initially sat to -1 before it is created
+    Integer id=-1;                  //Resource ID, initially sat to -1 before it is created
     Process occupier=null;      //Process object that occupies the resource, initially null because no one occupy it yet
     Queue <Integer> processesWaitingOnIt;    //Queue to add the processes waiting for the resource to get empty
     
